@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Evalbox's Frame</title>
+    <script>
+      var port = null;
+      window.addEventListener('message', function (e) {
+        // Only accept messages from sources in the same origin as my window's
+        // location's origin.
+        if (e.origin !== window.location.origin)
+          return;
+
+        // Only accept a single port.
+        if (port)
+          return;
+
+        // Initialize the port once we've gotten past the checks above, then
+        // tell it that we're ready for messages.
+        port = e.ports[0];
+        port.addEventListener('message', messageHandler);
+        port.start();
+      });
+
+      function messageHandler(e) {
+        // At this point, we trust the port: we don't have to check the origin
+        // or source or anything. We got the message over the trusted channel,
+        // so we can proceed with our hardcore evaluation action:
+        var result = '';
+        try {
+          result = eval(e.data);
+        } catch (e) {
+          result = 'eval() threw an exception.';
+        }
+
+        // Ensure that we include the nonce with the result, to prove we know
+        // what's up.
+        port.postMessage({
+          'nonce': window.location.hash,
+          'result': result
+        });
+      }
+    </script>
+  </head>
+</html>

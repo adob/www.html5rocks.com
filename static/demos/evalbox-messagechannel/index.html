@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Evalbox</title>
+    <style>
+      body {
+        width: 500px;
+        border: 1px solid #CCC;
+        box-shadow: 0px 0px 5px rgba(0,0,0,0.25);
+        border-width: 0 1px 1px 1px;
+        margin: 0 auto;
+        padding: 1em;
+        overflow: hidden;
+      }
+      html {
+        margin: 0;
+        padding: 0;
+      }
+      h1 {
+        font: 2em Helvetica, Arial, Sans-Serif;
+        font-weight: 700;
+        text-align: center;
+        margin: 0;
+      }
+      button {
+        margin: 0;
+      }
+      button + button {
+        float: right;
+      }
+      textarea {
+        display: block;
+        width: 494px;
+        height: 100px;
+        margin-bottom: 1em;
+      }
+      iframe { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>Evalbox</h1>
+    <p class='lead'>A toy demonstration of sandboxing. Type some JavaScript into
+    the field below; clicking one of the two buttons will run the code through
+    <code>eval()</code> in an <code>iframe</code>. The difference between the
+    sandboxed and unsandboxed versions should quickly become apparent:</p>
+    <textarea id='code'>window.localStorage['sekrit']</textarea>
+
+    <button id='unsafe'>eval() in an unsandboxed frame.</button>
+    <button id='safe'>eval() in a sandboxed frame.</button>
+
+    <iframe id='unsandboxed'></iframe>
+    <iframe sandbox='allow-scripts'
+            id='sandboxed'></iframe>
+
+    <script>
+      window.localStorage['sekrit'] = '[insert sensitive information here]';
+      var sandboxedFrame = document.getElementById('sandboxed');
+      var unsandboxedFrame = document.getElementById('unsandboxed');
+      var sandboxedButton = document.getElementById('safe');
+      var unsandboxedButton = document.getElementById('unsafe');
+      var textareaField = document.getElementById('code');
+
+      /////////////////////////////////////////////////////////////////////////
+      // Initialize the sandbox by:
+      sandboxedFrame.addEventListener('load', function () {
+        //
+        // 1. Adding a fragment identifier containing a randomly generated
+        //    nonce.
+        //
+        function generateNonce() {
+          var array = new Uint8Array(100);
+          window.crypto.getRandomValues(array);
+
+          var str = "";
+          for (var i = 0; i < array.length; i++) {
+            str += String.fromCharCode(array[i]);
+          }
+          return window.btoa(str);
+        }
+        var nonce = generateNonce();
+
+        // 1a. Verify that the IFrame we think we're talking to hasn't been
+        //     switched out from under us by verifying the URL. Here, we'll
+        //     check the origin. but you might also want to check the filename,
+        //     GET parameters, and so on.
+        var buffer = document.createElement('a');
+        buffer.href = sandboxedFrame.src;
+        if (buffer.origin !== window.location.origin)
+          return; // You might want to alert the user in some way here.
+        else
+          sandboxedFrame.src = sandboxedFrame.src + "#" + nonce;
+
+        //
+        // 2. Create a MessageChannel, and pass one of the ports into the
+        //    sandbox.
+        //
+        var sandboxedChannel = new MessageChannel();
+        sandboxedFrame.contentWindow.postMessage(
+            {'init': true},
+            '*',
+            [sandboxedChannel.port2]);
+
+        //
+        // 3. Hook up a listener to the other end of the channel.
+        //
+        sandboxedChannel.port1.addEventListener('message', function (e) {
+          alert('Result: ' + e.data.result);
+        });
+        sandboxedChannel.port1.start();
+
+        //
+        // 4. Hook up the button in the UI to talk to the channel.
+        //
+        sandboxedButton.addEventListener('click', function () {
+          var code = textareaField.value;
+          sandboxedChannel.port1.postMessage(code);
+        });
+      });
+
+      /////////////////////////////////////////////////////////////////////////
+      // Initialize the unsandboxed frame by:
+      unsandboxedFrame.addEventListener('load', function () {
+        //
+        // 1. Creating a MessageChannel, and passing one of the ports into the
+        //    frame:
+        //
+        var unsandboxedChannel = new MessageChannel();
+        unsandboxedFrame.contentWindow.postMessage(
+            {'init': true},
+            '*',
+            [unsandboxedChannel.port2]);
+
+        //
+        // 2. Hook up a listener to the other end of the channel.
+        //
+        unsandboxedChannel.port1.addEventListener('message', function (e) {
+          alert('Result: ' + e.data.result);
+        });
+        unsandboxedChannel.port1.start();
+
+        //
+        // 4. Hook up the button in the UI to talk to the channel.
+        //
+        unsandboxedButton.addEventListener('click', function () {
+          var code = textareaField.value;
+          unsandboxedChannel.port1.postMessage(code);
+        });
+      });
+
+      /////////////////////////////////////////////////////////////////////////
+      // Load the IFrames:
+      unsandboxedFrame.src = './frame.html';
+      sandboxedFrame.src = './frame.html';
+    </script>
+  </body>
+</html>
